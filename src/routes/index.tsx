@@ -229,7 +229,7 @@ function Entry() {
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-0" />
 
       {/* Navigation Bar */}
-      <header className="w-full bg-white backdrop-blur-md border-b border-orange-100 shadow-sm px-3 sm:px-6 py-3 z-10 sticky top-0">
+      <header className="w-full bg-white border-b border-orange-100 shadow-xs px-3 sm:px-6 py-3 z-30 relative">
         <div className="mx-auto flex max-w-6xl w-full items-center justify-between gap-2">
           {/* Brand Logo & Name */}
           <div className="flex items-center gap-2 sm:gap-3">
@@ -273,29 +273,29 @@ function Entry() {
         </div>
       </header>
 
-      {/* Main Content: Centered Large Sign In Card */}
-      <main className="mx-auto max-w-6xl w-full px-4 sm:px-6 flex-1 flex items-center justify-center z-10 py-6 sm:py-10">
-        <div className="bg-white/95 text-foreground border border-white/60 shadow-2xl backdrop-blur-xl max-w-xl w-full rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-10 space-y-5 sm:space-y-7">
-          <div className="space-y-1 sm:space-y-1.5">
-            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">Student Sign In</h2>
+      {/* Main Content: Perfectly Centered Stable Sign In Card */}
+      <main className="mx-auto max-w-6xl w-full px-4 flex-1 flex items-center justify-center z-10 py-4 sm:py-6 my-auto">
+        <div className="bg-white/95 text-foreground border border-white/60 shadow-2xl backdrop-blur-xl max-w-lg w-full rounded-2xl sm:rounded-3xl p-5 sm:p-7 space-y-4 sm:space-y-5">
+          <div className="space-y-1">
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">Student Sign In</h2>
             <p className="text-xs sm:text-sm text-muted-foreground">
               Enter your details to sign in or access your fee dashboard.
             </p>
           </div>
 
-          <form onSubmit={onSubmit} className="space-y-4 sm:space-y-5">
-            <div className="space-y-1.5 sm:space-y-2">
+          <form onSubmit={onSubmit} className="space-y-3.5 sm:space-y-4">
+            <div className="space-y-1.5">
               <Label htmlFor="name" className="text-xs sm:text-sm font-bold">Student Full Name</Label>
               <Input
                 id="name"
                 placeholder="Enter your name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="bg-card font-medium border-border h-11 sm:h-12 text-sm px-3.5 sm:px-4"
+                className="bg-card font-medium border-border h-10 sm:h-11 text-sm px-3.5"
               />
             </div>
 
-            <div className="space-y-1.5 sm:space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="mobile" className="text-xs sm:text-sm font-bold">Mobile Number</Label>
               <Input
                 id="mobile"
@@ -303,15 +303,15 @@ function Entry() {
                 inputMode="numeric"
                 value={mobile}
                 onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                className="bg-card font-medium font-mono text-sm sm:text-base border-border h-11 sm:h-12 px-3.5 sm:px-4"
+                className="bg-card font-medium font-mono text-sm sm:text-base border-border h-10 sm:h-11 px-3.5"
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <div className="space-y-1.5 sm:space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
                 <Label className="text-xs sm:text-sm font-bold">Department / Course</Label>
                 <Select value={course} onValueChange={(v) => { setCourse(v); setBranch(""); }}>
-                  <SelectTrigger id="course-trigger" className="bg-card border-border h-11 sm:h-12 text-xs sm:text-sm px-3.5 sm:px-4">
+                  <SelectTrigger id="course-trigger" className="bg-card border-border h-10 sm:h-11 text-xs sm:text-sm px-3.5">
                     <SelectValue placeholder="Select course" />
                   </SelectTrigger>
                   <SelectContent>
@@ -322,10 +322,10 @@ function Entry() {
                 </Select>
               </div>
 
-              <div className="space-y-1.5 sm:space-y-2">
+              <div className="space-y-1.5">
                 <Label className="text-xs sm:text-sm font-bold">Branch</Label>
                 <Select value={branch} onValueChange={setBranch} disabled={!course}>
-                  <SelectTrigger id="branch-trigger" className="bg-card border-border h-11 sm:h-12 text-xs sm:text-sm px-3.5 sm:px-4">
+                  <SelectTrigger id="branch-trigger" className="bg-card border-border h-10 sm:h-11 text-xs sm:text-sm px-3.5">
                     <SelectValue placeholder="Select branch" />
                   </SelectTrigger>
                   <SelectContent>
@@ -340,7 +340,7 @@ function Entry() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-extrabold py-6 sm:py-7 text-base sm:text-lg rounded-2xl shadow-xl shadow-orange-600/30 transition-all mt-2 sm:mt-4"
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-extrabold py-5 sm:py-6 text-base rounded-xl sm:rounded-2xl shadow-lg shadow-orange-600/30 transition-all mt-2"
             >
               {loading ? (
                 "Processing…"
@@ -355,7 +355,7 @@ function Entry() {
       </main>
 
       {/* Footer */}
-      <footer className="mx-auto max-w-6xl w-full px-6 py-4 text-center text-xs text-white/80 z-10">
+      <footer className="mx-auto max-w-6xl w-full px-6 py-3 text-center text-xs text-white/80 z-10">
         Student Fee Portal &copy; {new Date().getFullYear()} — All rights reserved.
       </footer>
 
