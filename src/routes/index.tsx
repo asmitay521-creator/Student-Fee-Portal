@@ -117,7 +117,7 @@ function Entry() {
     })();
   }, []);
 
-  // Dynamic mobile lookup when 10 digits are typed
+  // Dynamic mobile lookup when 10 digits are typed -> Auto Login immediately!
   useEffect(() => {
     if (mobile.length === 10) {
       (async () => {
@@ -127,10 +127,8 @@ function Entry() {
           if (!snap.empty) {
             const d = snap.docs[0];
             const data = d.data() as any;
-            setExistingStudent({ id: d.id, name: data.name, course: data.course, branch: data.branch });
-            setName(data.name);
-            if (data.course) setCourse(data.course);
-            if (data.branch) setBranch(data.branch);
+            toast.success(`Welcome back, ${data.name}! Logging in...`);
+            navigate({ to: "/dashboard/$studentId", params: { studentId: d.id } });
           } else {
             setExistingStudent(null);
           }
@@ -141,7 +139,7 @@ function Entry() {
     } else {
       setExistingStudent(null);
     }
-  }, [mobile]);
+  }, [mobile, navigate]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -260,7 +258,7 @@ function Entry() {
               <Label htmlFor="name" className="text-xs font-bold">Student Full Name</Label>
               <Input
                 id="name"
-                placeholder="Enter your name"
+                placeholder="Enter your full name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="bg-card font-medium border-border h-9 text-xs sm:text-sm px-3"
