@@ -223,8 +223,8 @@ function Entry() {
       className="h-screen w-screen overflow-hidden bg-cover bg-center bg-no-repeat relative flex flex-col justify-between"
       style={{ backgroundImage: `url('/college_bg.png')` }}
     >
-      {/* Dark overlay for optimal contrast */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-0" />
+      {/* Light overlay for readability without hiding the background */}
+      <div className="absolute inset-0 bg-black/20 z-0" />
 
       {/* Navigation Bar - Clean Header */}
       <header className="w-full bg-white border-b border-orange-100 shadow-xs px-4 sm:px-6 py-3 z-30 shrink-0">
