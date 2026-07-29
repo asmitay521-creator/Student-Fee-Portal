@@ -427,11 +427,11 @@ function Dashboard() {
       {/* Header */}
       <header className="border-b border-border/60 bg-card/80 backdrop-blur sticky top-0 z-20">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 py-3">
-          <div className="flex items-center gap-2.5 sm:gap-3">
-            <img src="/college_logo.png" alt="NPC Dhule Logo" className="h-9 sm:h-10 w-auto object-contain shrink-0" />
+          <div className="flex items-center gap-3">
+            <img src="/college_logo.png" alt="NPC Dhule Logo" className="h-12 sm:h-16 w-auto object-contain shrink-0 filter drop-shadow-sm" />
             <div>
-              <div className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">Netaji Polytechnic College, Dhule</div>
-              <div className="font-extrabold text-sm sm:text-base capitalize text-foreground truncate max-w-[160px] sm:max-w-none">{s.name}</div>
+              <div className="text-[10px] sm:text-xs font-bold text-orange-600">Netaji Polytechnic College, Dhule</div>
+              <div className="font-extrabold text-sm sm:text-lg capitalize text-foreground truncate max-w-[160px] sm:max-w-none">{s.name}</div>
             </div>
           </div>
 

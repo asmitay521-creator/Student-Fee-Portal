@@ -795,15 +795,15 @@ function Admin() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border/70 bg-card/60 backdrop-blur sticky top-0 z-20">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <img src="/college_logo.png" alt="NPC Dhule Logo" className="h-11 w-auto object-contain shrink-0" />
+        <div className="mx-auto flex flex-col sm:flex-row max-w-7xl items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 gap-3">
+          <div className="flex items-center gap-3.5">
+            <img src="/college_logo.png" alt="NPC Dhule Logo" className="h-12 sm:h-16 w-auto object-contain shrink-0 filter drop-shadow-sm" />
             <div>
-              <div className="text-xs font-medium text-muted-foreground">Admin Control Panel</div>
-              <div className="font-bold text-lg leading-tight">Netaji Polytechnic College, Dhule</div>
+              <div className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Admin Control Panel</div>
+              <div className="font-extrabold text-base sm:text-xl leading-tight text-foreground">Netaji Polytechnic College, Dhule</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
             <Button
               variant="outline"
               size="sm"
@@ -856,9 +856,9 @@ function Admin() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl p-6 space-y-6">
+      <main className="mx-auto max-w-7xl p-4 sm:p-6 space-y-4 sm:space-y-6">
         {/* Dynamic Metric Cards */}
-        <div className="grid gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <StatCard icon={Users} label="Total Students Enrolled" value={String(stats.count)} tone="purple" />
           <StatCard
             icon={TrendingUp}

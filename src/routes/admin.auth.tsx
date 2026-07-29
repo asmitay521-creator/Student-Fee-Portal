@@ -97,17 +97,13 @@ function AdminAuth() {
         </Link>
 
         <div className="glass rounded-3xl p-8 shadow-card">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-purple shadow-glow-purple">
-                <ShieldCheck className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold">Admin Portal Access</h1>
-                <p className="text-xs text-muted-foreground">
-                  Sign in or create administrator account
-                </p>
-              </div>
+          <div className="flex flex-col items-center text-center gap-2 mb-2">
+            <img src="/college_logo.png" alt="NPC Dhule Logo" className="h-16 w-auto object-contain filter drop-shadow-sm" />
+            <div>
+              <h1 className="text-xl font-extrabold text-foreground">Netaji Polytechnic College, Dhule</h1>
+              <p className="text-xs text-orange-600 font-bold">
+                Admin Control Panel Portal Access
+              </p>
             </div>
           </div>
 

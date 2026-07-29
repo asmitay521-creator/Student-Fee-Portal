@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
@@ -190,50 +190,61 @@ function Entry() {
 
   return (
     <div
-      className="min-h-screen w-full bg-cover bg-center bg-no-repeat relative flex flex-col"
+      className="h-screen h-[100dvh] w-full bg-cover bg-center bg-no-repeat relative flex flex-col justify-between overflow-hidden"
       style={{ backgroundImage: `url('/college_bg.png')` }}
     >
       {/* Subtle overlay */}
-      <div className="absolute inset-0 bg-black/10 z-0" />
+      <div className="absolute inset-0 bg-black/25 sm:bg-black/15 z-0" />
 
-      {/* Sticky Navbar */}
-      <header className="sticky top-0 z-30 w-full bg-white border-b border-orange-100 shadow-sm">
-        <div className="mx-auto flex max-w-5xl w-full items-center justify-between px-4 sm:px-6 py-2">
-          <div className="flex items-center gap-3">
-            <img src="/college_logo.png" alt="NPC Dhule Logo" className="h-10 w-auto object-contain shrink-0" />
+      {/* Compact Navbar */}
+      <header className="shrink-0 z-30 w-full bg-white/98 backdrop-blur border-b border-orange-100 shadow-sm">
+        <div className="mx-auto flex max-w-6xl w-full items-center justify-between px-3 sm:px-6 py-1.5 sm:py-2">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <img src="/college_logo.png" alt="NPC Dhule Logo" className="h-8 sm:h-9 w-auto object-contain shrink-0 filter drop-shadow-sm" />
             <div className="leading-tight">
-              <span className="font-black text-sm sm:text-base tracking-tight text-slate-900 block">
+              <span className="font-extrabold text-xs sm:text-base tracking-tight text-slate-900 block">
                 Netaji Polytechnic College, Dhule
               </span>
-              <span className="text-[10px] sm:text-xs text-orange-600 font-semibold">Student Fee Portal</span>
+              <span className="text-[10px] sm:text-xs text-orange-600 font-bold tracking-wide">Student Fee Portal</span>
             </div>
           </div>
+
+          <Link
+            to="/admin/auth"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-orange-50 hover:text-orange-600 transition-colors border border-slate-200"
+          >
+            <ShieldCheck className="h-3.5 w-3.5 text-orange-600" />
+            <span>Admin Portal</span>
+          </Link>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="relative z-10 flex-1 flex items-start sm:items-center justify-center px-4 py-8 sm:py-10">
-        <div className="bg-white/96 text-foreground border border-white/50 shadow-2xl w-full max-w-md rounded-2xl p-5 sm:p-7 space-y-4">
+      {/* Main Container - fixed 100vh non-scrolling stable layout */}
+      <main className="relative z-10 flex-1 flex flex-col justify-center items-center px-3 sm:px-4 py-2 sm:py-4 overflow-y-auto">
+        <div className="bg-white/96 backdrop-blur text-foreground border border-white/60 shadow-xl w-full max-w-md rounded-2xl p-4 sm:p-6 space-y-3 my-auto">
           {/* Tab Switcher for Sign In / Manual Registration */}
           <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
             <button
               type="button"
               onClick={() => setIsRegistering(false)}
-              className={`py-2 rounded-lg transition-all ${!isRegistering ? "bg-white text-orange-600 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+              className={`py-1.5 rounded-lg transition-all ${!isRegistering ? "bg-white text-orange-600 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
             >
               Student Sign In
             </button>
             <button
               type="button"
               onClick={() => setIsRegistering(true)}
-              className={`py-2 rounded-lg transition-all ${isRegistering ? "bg-white text-orange-600 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+              className={`py-1.5 rounded-lg transition-all ${isRegistering ? "bg-white text-orange-600 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
             >
               New Student Register
             </button>
           </div>
 
-          <div>
-            <h2 className="text-xl font-extrabold tracking-tight text-slate-900">
+          <div className="flex flex-col items-center text-center">
+            <div className="h-10 w-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center mb-1 shadow-sm">
+              <GraduationCap className="h-6 w-6 text-orange-600" />
+            </div>
+            <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900">
               {isRegistering ? "New Student Manual Registration" : "Student Portal Sign In"}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -244,7 +255,7 @@ function Entry() {
           </div>
 
           {!isRegistering ? (
-            <form onSubmit={handleSignIn} className="space-y-4">
+            <form onSubmit={handleSignIn} className="space-y-3">
               {/* Enrolment ID */}
               <div className="space-y-1">
                 <Label htmlFor="enrolmentId" className="text-xs font-bold text-slate-700">Enter your enrolment no/id</Label>
@@ -253,7 +264,7 @@ function Entry() {
                   placeholder="Enter your enrolment no/id"
                   value={enrolmentId}
                   onChange={(e) => setEnrolmentId(e.target.value)}
-                  className="bg-white border-slate-200 h-11 text-sm px-3 rounded-xl focus-visible:ring-orange-400 font-mono"
+                  className="bg-white border-slate-200 h-10 text-xs sm:text-sm px-3 rounded-xl focus-visible:ring-orange-400 font-mono"
                   required
                 />
               </div>
@@ -266,7 +277,7 @@ function Entry() {
                   placeholder="Enter your registered full name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-white border-slate-200 h-11 text-sm px-3 rounded-xl focus-visible:ring-orange-400"
+                  className="bg-white border-slate-200 h-10 text-xs sm:text-sm px-3 rounded-xl focus-visible:ring-orange-400"
                   required
                 />
               </div>
@@ -274,7 +285,7 @@ function Entry() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-extrabold h-12 text-base rounded-xl shadow-lg shadow-orange-600/30 transition-all"
+                className="w-full bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-extrabold h-10 text-sm rounded-xl shadow-md shadow-orange-600/30 transition-all"
               >
                 {loading ? (
                   <span className="flex items-center gap-2">
@@ -288,7 +299,7 @@ function Entry() {
                 )}
               </Button>
 
-              <div className="pt-2 text-center text-xs text-slate-500">
+              <div className="pt-1 text-center text-xs text-slate-500">
                 Not registered yet?{" "}
                 <button
                   type="button"
@@ -300,7 +311,7 @@ function Entry() {
               </div>
             </form>
           ) : (
-            <form onSubmit={handleRegister} className="space-y-4">
+            <form onSubmit={handleRegister} className="space-y-3">
               <div className="space-y-1">
                 <Label htmlFor="regEnrolment" className="text-xs font-bold text-slate-700">Enter your enrolment no/id</Label>
                 <Input
@@ -308,7 +319,7 @@ function Entry() {
                   placeholder="Enter your enrolment no/id"
                   value={enrolmentId}
                   onChange={(e) => setEnrolmentId(e.target.value)}
-                  className="bg-white border-slate-200 h-11 text-sm px-3 rounded-xl focus-visible:ring-orange-400 font-mono"
+                  className="bg-white border-slate-200 h-10 text-xs sm:text-sm px-3 rounded-xl focus-visible:ring-orange-400 font-mono"
                   required
                 />
               </div>
@@ -320,7 +331,7 @@ function Entry() {
                   placeholder="Enter full name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-white border-slate-200 h-11 text-sm px-3 rounded-xl focus-visible:ring-orange-400"
+                  className="bg-white border-slate-200 h-10 text-xs sm:text-sm px-3 rounded-xl focus-visible:ring-orange-400"
                   required
                 />
               </div>
@@ -333,16 +344,16 @@ function Entry() {
                   inputMode="numeric"
                   value={mobile}
                   onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                  className="bg-white border-slate-200 h-11 font-mono text-sm px-3 rounded-xl focus-visible:ring-orange-400"
+                  className="bg-white border-slate-200 h-10 font-mono text-xs sm:text-sm px-3 rounded-xl focus-visible:ring-orange-400"
                   required
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs font-bold text-slate-700">Academic Scheme</Label>
                   <Select value={scheme} onValueChange={setScheme}>
-                    <SelectTrigger className="bg-white border-slate-200 h-11 text-sm px-3 rounded-xl">
+                    <SelectTrigger className="bg-white border-slate-200 h-10 text-xs px-3 rounded-xl">
                       <SelectValue placeholder="Select scheme" />
                     </SelectTrigger>
                     <SelectContent>
@@ -356,7 +367,7 @@ function Entry() {
                 <div className="space-y-1">
                   <Label className="text-xs font-bold text-slate-700">Studying Year</Label>
                   <Select value={year} onValueChange={setYear}>
-                    <SelectTrigger className="bg-white border-slate-200 h-11 text-sm px-3 rounded-xl">
+                    <SelectTrigger className="bg-white border-slate-200 h-10 text-xs px-3 rounded-xl">
                       <SelectValue placeholder="Select year" />
                     </SelectTrigger>
                     <SelectContent>
@@ -371,12 +382,12 @@ function Entry() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-extrabold h-12 text-base rounded-xl shadow-lg shadow-orange-600/30 transition-all"
+                className="w-full bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-extrabold h-10 text-sm rounded-xl shadow-md shadow-orange-600/30 transition-all"
               >
                 {loading ? "Registering…" : "Complete Registration"}
               </Button>
 
-              <div className="pt-2 text-center text-xs text-slate-500">
+              <div className="pt-1 text-center text-xs text-slate-500">
                 Already registered?{" "}
                 <button
                   type="button"
@@ -392,7 +403,7 @@ function Entry() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 w-full py-3 text-center text-[11px] text-white/70">
+      <footer className="relative z-10 shrink-0 w-full py-1.5 text-center text-[10px] text-white/80 bg-black/20 backdrop-blur-sm">
         Student Fee Portal &copy; {new Date().getFullYear()} — All rights reserved.
       </footer>
     </div>
