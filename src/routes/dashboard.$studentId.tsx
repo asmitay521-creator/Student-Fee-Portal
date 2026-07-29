@@ -64,10 +64,13 @@ export const Route = createFileRoute("/dashboard/$studentId")({
 
 type Student = {
   id: string;
+  enrolment_id?: string;
   name: string;
   mobile: string;
-  course: string;
-  branch: string;
+  scheme?: string;
+  year?: string;
+  course?: string;
+  branch?: string;
   exam_fee: number;
   tuition_fee: number;
   exam_paid?: boolean;
@@ -98,6 +101,37 @@ function inr(n: number) {
   }).format(n);
 }
 
+function formatDate(isoStr: string) {
+  if (!isoStr) return "";
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    return d.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  } catch (e) {
+    return isoStr;
+  }
+}
+
+function formatTime(isoStr: string) {
+  if (!isoStr) return "";
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    });
+  } catch (e) {
+    return "";
+  }
+}
+
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
     if ((window as any).Razorpay) {
@@ -113,18 +147,24 @@ function loadRazorpayScript(): Promise<boolean> {
 
 function downloadExcelReceipt(payment: Payment, student: Student) {
   const feeLabel = payment.fee_type.includes("college") || payment.fee_type === "exam" ? "College Fee" : "Tuition Fee";
+  const dateStr = formatDate(payment.created_at);
+  const timeStr = formatTime(payment.created_at);
+
   const csvData = [
     ["STUDENT FEE PAYMENT RECEIPT", ""],
     ["", ""],
     ["Student Name", `"${student.name}"`],
+    ["Enrolment ID", `"${student.enrolment_id || student.id.slice(0, 8).toUpperCase()}"`],
     ["Student ID", student.id.slice(0, 8).toUpperCase()],
-    ["Course & Branch", `"${student.course} - ${student.branch}"`],
+    ["Scheme & Year", `"${student.scheme || student.course || "I-Scheme"} (${student.year || student.branch || "1st Year"})"`],
     ["Mobile Number", student.mobile],
     ["---------------------------------", "---------------------------------"],
     ["Fee Category", `"${feeLabel}"`],
     ["Amount Paid (INR)", payment.amount],
     ["Transaction ID", payment.transaction_id],
-    ["Payment Date", `"${new Date(payment.created_at).toLocaleString()}"`],
+    ["Payment Date", `"${dateStr}"`],
+    ["Payment Time", `"${timeStr}"`],
+    ["Date & Time (Full)", `"${dateStr} ${timeStr}"`],
     ["Payment Status", "SUCCESSFUL (VERIFIED)"],
   ]
     .map((row) => row.join(","))
@@ -388,19 +428,17 @@ function Dashboard() {
       <header className="border-b border-border/60 bg-card/80 backdrop-blur sticky top-0 z-20">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 py-3">
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="grid h-9 w-9 sm:h-10 sm:w-10 place-items-center rounded-2xl bg-orange-600 shadow-md shadow-orange-600/20 shrink-0">
-              <GraduationCap className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
-            </div>
+            <img src="/college_logo.png" alt="NPC Dhule Logo" className="h-9 sm:h-10 w-auto object-contain shrink-0" />
             <div>
-              <div className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">Student Portal</div>
+              <div className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">Netaji Polytechnic College, Dhule</div>
               <div className="font-extrabold text-sm sm:text-base capitalize text-foreground truncate max-w-[160px] sm:max-w-none">{s.name}</div>
             </div>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="hidden sm:block text-right text-xs">
-              <div className="font-semibold text-foreground">{s.course}</div>
-              <div className="text-muted-foreground">{s.branch} • ID: {s.id.slice(0, 8).toUpperCase()}</div>
+              <div className="font-semibold text-foreground">{s.scheme || s.course || "I-Scheme"} • {s.year || s.branch || "1st Year"}</div>
+              <div className="text-muted-foreground">Enrolment ID: {s.enrolment_id || s.id.slice(0, 8).toUpperCase()}</div>
             </div>
             <Button
               variant="outline"
@@ -613,8 +651,9 @@ function Dashboard() {
                         {p.fee_type.includes("college") || p.fee_type === "exam" ? "College Fee" : "Tuition Fee"}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 text-[11px] text-muted-foreground">
-                      {new Date(p.created_at).toLocaleString()}
+                    <td className="py-2.5 px-3 text-[11px]">
+                      <div className="font-semibold text-foreground">{formatDate(p.created_at)}</div>
+                      <div className="text-[10px] text-orange-600 font-mono font-medium">{formatTime(p.created_at)}</div>
                     </td>
                     <td className="py-2.5 px-3 font-bold text-foreground">
                       {inr(Number(p.amount))}
@@ -707,7 +746,7 @@ function ReceiptDialog({
       </head><body>
       <div class="header">
         <div>
-          <h1>Student Fee Portal — Official Payment Receipt</h1>
+          <h1>Netaji Polytechnic College, Dhule — Official Payment Receipt</h1>
           <div style="font-size:12px;color:#666">Payment Transaction ID: ${payment!.transaction_id}</div>
         </div>
       </div>
@@ -734,12 +773,10 @@ function ReceiptDialog({
         <div ref={ref} className="rounded-2xl border border-border p-4 text-xs sm:text-sm space-y-3 bg-background">
           <div className="flex items-center justify-between border-b border-border pb-3">
             <div>
-              <h1 className="text-base font-bold">Student Fee Portal</h1>
+              <h1 className="text-base font-bold">Netaji Polytechnic College, Dhule</h1>
               <div className="text-[11px] text-muted-foreground">Official Payment Receipt</div>
             </div>
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-orange-600 text-white shadow-md">
-              <GraduationCap className="h-4 w-4" />
-            </div>
+            <img src="/college_logo.png" alt="NPC Dhule Logo" className="h-10 w-auto object-contain" />
           </div>
           <table className="w-full">
             <tbody>
@@ -748,9 +785,10 @@ function ReceiptDialog({
               <tr><td className="text-muted-foreground py-1.5">Course / Branch</td><td>{student.course} ({student.branch})</td></tr>
               <tr><td className="text-muted-foreground py-1.5">Fee Category</td><td className="capitalize font-medium">{payment.fee_type.includes("college") || payment.fee_type === "exam" ? "College Fee" : "Tuition Fee"}</td></tr>
               <tr><td className="text-muted-foreground py-1.5">Amount Paid</td><td className="text-orange-600 font-extrabold text-sm sm:text-base">{inr(Number(payment.amount))}</td></tr>
-              <tr><td className="text-muted-foreground py-1.5">Transaction ID</td><td className="font-mono text-xs font-bold">{payment.transaction_id}</td></tr>
-              <tr><td className="text-muted-foreground py-1.5">Payment Date</td><td className="text-xs">{new Date(payment.created_at).toLocaleString()}</td></tr>
-              <tr><td className="text-muted-foreground py-1.5">Payment Status</td><td className="text-orange-600 font-bold">Successful ✓</td></tr>
+              <tr><td className="text-muted-foreground py-1.5 font-medium">Transaction ID</td><td className="font-mono text-xs font-bold">{payment.transaction_id}</td></tr>
+              <tr><td className="text-muted-foreground py-1.5 font-medium">Payment Date</td><td className="font-semibold text-foreground text-xs">{formatDate(payment.created_at)}</td></tr>
+              <tr><td className="text-muted-foreground py-1.5 font-medium">Payment Time</td><td className="font-mono font-bold text-orange-600 text-xs">{formatTime(payment.created_at)}</td></tr>
+              <tr><td className="text-muted-foreground py-1.5 font-medium">Payment Status</td><td className="text-emerald-600 font-bold">Successful ✓</td></tr>
             </tbody>
           </table>
         </div>

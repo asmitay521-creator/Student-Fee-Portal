@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import {
   Users,
   LogOut,
@@ -21,12 +22,15 @@ import {
   BookOpen,
   FolderPlus,
   X,
+  FileSpreadsheet,
+  Upload,
 } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { signOut as firebaseSignOut } from "firebase/auth";
 import {
   collection,
   query,
+  where,
   orderBy,
   getDocs,
   doc,
@@ -35,6 +39,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +64,8 @@ import {
   COURSES as DEFAULT_COURSES,
   DEFAULT_EXAM_FEE,
   DEFAULT_TUITION_FEE_BY_COURSE,
+  SCHEMES,
+  YEARS,
 } from "@/lib/courses";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -67,10 +74,14 @@ export const Route = createFileRoute("/_authenticated/admin")({
 
 type Student = {
   id: string;
+  enrolment_id?: string;
   name: string;
   mobile: string;
-  course: string;
-  branch: string;
+  scheme?: string;
+  year?: string;
+  course?: string;
+  branch?: string;
+  excel_index?: number;
   exam_fee: number;
   tuition_fee: number;
   exam_paid?: boolean;
@@ -103,14 +114,415 @@ function Admin() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [courseFilter, setCourseFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"latest" | "name" | "balance">("latest");
+  const [schemeFilter, setSchemeFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"sequence" | "latest" | "name" | "balance">("sequence");
 
   const [editing, setEditing] = useState<Student | null>(null);
   const [creating, setCreating] = useState(false);
   const [payingStudent, setPayingStudent] = useState<Student | null>(null);
   const [showDepartmentFees, setShowDepartmentFees] = useState(false);
   const [showCourseBranches, setShowCourseBranches] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingExcel, setUploadingExcel] = useState(false);
+
+  function downloadSampleExcel() {
+    const polyRows = [
+      {
+        "Enrolment ID": "ENR2024001",
+        "Student Name": "Rahul Sharma",
+        "Mobile Number": "9876543210",
+        "Scheme": "I-Scheme",
+        "Year": "2nd Year",
+        "College Fee": 50000,
+        "Tuition Fee": 850,
+        "College Paid": 25000,
+        "Tuition Paid": 850,
+      },
+      {
+        "Enrolment ID": "ENR2024002",
+        "Student Name": "Priya Patel",
+        "Mobile Number": "9876543211",
+        "Scheme": "K-Scheme",
+        "Year": "1st Year",
+        "College Fee": 50000,
+        "Tuition Fee": 850,
+        "College Paid": 0,
+        "Tuition Paid": 0,
+      },
+    ];
+
+    const pharmRows = [
+      {
+        "Enrolment ID": "ENR2024003",
+        "Student Name": "Amit Kumar",
+        "Mobile Number": "9876543212",
+        "Scheme": "G-Scheme",
+        "Year": "3rd Year",
+        "College Fee": 50000,
+        "Tuition Fee": 850,
+        "College Paid": 50000,
+        "Tuition Paid": 850,
+      },
+      {
+        "Enrolment ID": "ENR2024004",
+        "Student Name": "Sneha Verma",
+        "Mobile Number": "9876543213",
+        "Scheme": "Autonomous Scheme",
+        "Year": "1st Year",
+        "College Fee": 50000,
+        "Tuition Fee": 850,
+        "College Paid": 10000,
+        "Tuition Paid": 0,
+      },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+
+    const polySheet = XLSX.utils.json_to_sheet(polyRows);
+    XLSX.utils.book_append_sheet(workbook, polySheet, "Polytechnic");
+
+    const pharmSheet = XLSX.utils.json_to_sheet(pharmRows);
+    XLSX.utils.book_append_sheet(workbook, pharmSheet, "Pharmacy");
+
+    XLSX.writeFile(workbook, "Student_MultiSheet_Import_Template.xlsx");
+    toast.success("Sample Multi-Sheet Excel template downloaded!");
+  }
+
+  async function handleClearAllStudents() {
+    if (!confirm("Are you sure you want to remove all imported student records? This will clear all current student data so you can upload a fresh Excel sheet.")) return;
+
+    setUploadingExcel(true);
+    try {
+      const snap = await getDocs(collection(db, "students"));
+      if (snap.empty) {
+        toast.info("No student records found to clear.");
+        setUploadingExcel(false);
+        return;
+      }
+
+      let batch = writeBatch(db);
+      let count = 0;
+
+      for (const d of snap.docs) {
+        batch.delete(doc(db, "students", d.id));
+        count++;
+        if (count % 450 === 0) {
+          await batch.commit();
+          batch = writeBatch(db);
+        }
+      }
+
+      if (count % 450 !== 0) {
+        await batch.commit();
+      }
+
+      toast.success(`Successfully removed all ${snap.docs.length} student records!`);
+      await qc.invalidateQueries({ queryKey: ["admin", "students"] });
+      await qc.refetchQueries({ queryKey: ["admin", "students"] });
+    } catch (err: any) {
+      toast.error("Failed to remove student records: " + (err.message || "Unknown error"));
+    } finally {
+      setUploadingExcel(false);
+    }
+  }
+
+  async function handleExcelUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingExcel(true);
+    toast.info(`Parsing ${file.name}...`);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: "array" });
+
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        toast.error("The uploaded Excel file contains no worksheets.");
+        setUploadingExcel(false);
+        if (e.target) e.target.value = "";
+        return;
+      }
+
+      const deptFees = departmentFeesQ.data;
+
+      // Get all existing student records for matching
+      const allDocsSnap = await getDocs(collection(db, "students"));
+      const existingMap = new Map<string, { id: string; created_at?: string }>();
+      allDocsSnap.docs.forEach((d) => {
+        const data = d.data() as any;
+        if (data.enrolment_id) {
+          existingMap.set(String(data.enrolment_id).trim().toLowerCase(), { id: d.id, created_at: data.created_at });
+        }
+        if (data.mobile) {
+          existingMap.set(String(data.mobile).trim(), { id: d.id, created_at: data.created_at });
+        }
+        if (data.name) {
+          existingMap.set(String(data.name).trim().toLowerCase(), { id: d.id, created_at: data.created_at });
+        }
+        existingMap.set(d.id.toLowerCase(), { id: d.id, created_at: data.created_at });
+      });
+
+      let totalCount = 0;
+      const sheetSummary: string[] = [];
+
+      let batch = writeBatch(db);
+      let batchOpsCount = 0;
+
+      // Process ALL worksheets in the Excel file
+      for (const sheetName of workbook.SheetNames) {
+        const worksheet = workbook.Sheets[sheetName];
+        if (!worksheet) continue;
+
+        // Infer default department/category from sheet name
+        const lowerSheetName = sheetName.toLowerCase();
+        let defaultDept = "Polytechnic";
+        if (lowerSheetName.includes("pharm")) {
+          defaultDept = "Pharmacy";
+        } else if (lowerSheetName.includes("eng")) {
+          defaultDept = "Engineering";
+        } else if (lowerSheetName.includes("poly")) {
+          defaultDept = "Polytechnic";
+        }
+
+        const rawGrid: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+        if (!rawGrid || rawGrid.length === 0) continue;
+
+        let headerIndex = -1;
+        for (let i = 0; i < Math.min(rawGrid.length, 20); i++) {
+          const rowStr = rawGrid[i].map((cell) => String(cell).toLowerCase()).join(" ");
+          if (
+            rowStr.includes("name") ||
+            rowStr.includes("student") ||
+            rowStr.includes("enrol") ||
+            rowStr.includes("roll") ||
+            rowStr.includes("mobile") ||
+            rowStr.includes("phone") ||
+            rowStr.includes("scheme") ||
+            rowStr.includes("year") ||
+            rowStr.includes("course") ||
+            rowStr.includes("branch") ||
+            rowStr.includes("dept")
+          ) {
+            headerIndex = i;
+            break;
+          }
+        }
+
+        let parsedRows: Record<string, any>[] = [];
+        if (headerIndex !== -1) {
+          const headers = rawGrid[headerIndex].map((h: any) => String(h).trim());
+          for (let r = headerIndex + 1; r < rawGrid.length; r++) {
+            const rowArr = rawGrid[r];
+            if (!rowArr || rowArr.every((cell) => cell === "" || cell === null || cell === undefined)) continue;
+            const rowObj: Record<string, any> = {};
+            headers.forEach((hdr: string, cIdx: number) => {
+              if (hdr) rowObj[hdr] = rowArr[cIdx] !== undefined ? rowArr[cIdx] : "";
+            });
+            parsedRows.push(rowObj);
+          }
+        } else {
+          parsedRows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+        }
+
+        let sheetCount = 0;
+        let rowIndexCounter = 0;
+
+        for (const row of parsedRows) {
+          rowIndexCounter++;
+          const findVal = (...keys: string[]) => {
+            for (const k of keys) {
+              const targetNorm = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+              const foundKey = Object.keys(row).find((rk) => rk.trim().toLowerCase().replace(/[^a-z0-9]/g, "") === targetNorm);
+              if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null && String(row[foundKey]).trim() !== "") {
+                return String(row[foundKey]).trim();
+              }
+            }
+            return "";
+          };
+
+          const enrolmentId = findVal(
+            "enrolment_id",
+            "enrolment id",
+            "enrollment_id",
+            "enrollment id",
+            "enrolment no",
+            "enrollment no",
+            "roll no",
+            "roll_no",
+            "rollno",
+            "student id",
+            "student_id",
+            "id",
+            "sr no",
+            "sno",
+            "reg no",
+            "registration no"
+          );
+          const name = findVal("name", "student name", "full name", "candidate name", "student_name");
+          const mobile = findVal("mobile", "mobile number", "phone", "contact", "mobile_no", "contact_no").replace(/\D/g, "");
+
+          const rawCourse = findVal("course", "department", "stream", "dept", "category", "program", "programme");
+          const rawBranch = findVal("branch", "specialization", "discipline", "substream");
+          const rawScheme = findVal("scheme", "ischeme", "kscheme", "gscheme", "academicscheme", "pattern");
+          const rawYear = findVal("year", "academicyear", "studyingyear", "classyear", "currentyear", "yr", "class");
+
+          if (!name && !enrolmentId && !mobile) continue;
+
+          const rowStr = Object.values(row).join(" ").toLowerCase();
+          const cleanName = name || "Student";
+          const cleanEnrolmentId = enrolmentId || (mobile ? `ENR${mobile}` : `ENR${Math.floor(100000 + Math.random() * 900000)}`);
+
+          // Differentiate Course / Department & Branch per ROW
+          const rowOnlyText = `${rowStr} ${rawCourse} ${rawBranch} ${cleanName}`.toLowerCase();
+
+          let course = "";
+          let branch = "";
+
+          // 1. Is this specific row Pharmacy?
+          if (
+            rowOnlyText.includes("pharm") ||
+            rowOnlyText.includes("d.pharm") ||
+            rowOnlyText.includes("b.pharm") ||
+            rowOnlyText.includes("m.pharm") ||
+            rowOnlyText.includes("dpharm") ||
+            rowOnlyText.includes("bpharm") ||
+            rowOnlyText.includes("mpharm") ||
+            rowOnlyText.includes("d-pharm") ||
+            rowOnlyText.includes("b-pharm") ||
+            rowOnlyText.includes("pharmacy")
+          ) {
+            course = "Pharmacy";
+            if (rowOnlyText.includes("b.pharm") || rowOnlyText.includes("bpharm") || rowOnlyText.includes("b-pharm") || rowOnlyText.includes("b pharmacy")) {
+              branch = rawBranch || "B. Pharm";
+            } else {
+              branch = rawBranch || "D. Pharm";
+            }
+          } 
+          // 2. Is this specific row Polytechnic?
+          else if (
+            rowOnlyText.includes("poly") ||
+            rowOnlyText.includes("diploma in eng") ||
+            rowOnlyText.includes("mechanical") ||
+            rowOnlyText.includes("civil") ||
+            rowOnlyText.includes("electrical") ||
+            rowOnlyText.includes("computer") ||
+            rowOnlyText.includes("electronics") ||
+            rowOnlyText.includes("automobile") ||
+            rowOnlyText.includes("i-scheme") ||
+            rowOnlyText.includes("k-scheme") ||
+            rowOnlyText.includes("g-scheme")
+          ) {
+            course = "Polytechnic";
+            branch = rawBranch || "Mechanical";
+          } 
+          // 3. Is this specific row Engineering?
+          else if (
+            rowOnlyText.includes("eng") ||
+            rowOnlyText.includes("b.tech") ||
+            rowOnlyText.includes("be") ||
+            rowOnlyText.includes("b.e")
+          ) {
+            course = "Engineering";
+            branch = rawBranch || "Computer Science & Engineering";
+          } 
+          // 4. Fallback to rawCourse or sheetName hint
+          else {
+            const sheetLower = sheetName.toLowerCase();
+            if (sheetLower.includes("pharm")) {
+              course = "Pharmacy";
+              branch = rawBranch || "D. Pharm";
+            } else if (sheetLower.includes("eng")) {
+              course = "Engineering";
+              branch = rawBranch || "Computer Science & Engineering";
+            } else {
+              course = rawCourse || "Polytechnic";
+              branch = rawBranch || "General";
+            }
+          }
+
+          const scheme = rawScheme || "I-Scheme";
+          const year = rawYear || "1st Year";
+
+          const examFeeStr = findVal("college fee", "exam fee", "college_fee", "exam_fee", "total college fee");
+          const tuitionFeeStr = findVal("tuition fee", "tuition_fee", "total tuition fee");
+          const collegePaidStr = findVal("college paid", "exam paid", "college_paid_amount", "college paid amount");
+          const tuitionPaidStr = findVal("tuition paid", "tuition_paid_amount", "tuition paid amount");
+
+          const examFee = examFeeStr ? Number(examFeeStr) : (deptFees?.[course]?.exam_fee || deptFees?.[scheme]?.exam_fee || 50000);
+          const tuitionFee = tuitionFeeStr ? Number(tuitionFeeStr) : (deptFees?.[course]?.tuition_fee || deptFees?.[scheme]?.tuition_fee || 850);
+          const collegePaid = collegePaidStr ? Number(collegePaidStr) : 0;
+          const tuitionPaid = tuitionPaidStr ? Number(tuitionPaidStr) : 0;
+
+          const existingRecord =
+            existingMap.get(cleanEnrolmentId.toLowerCase()) ||
+            (mobile ? existingMap.get(mobile) : undefined) ||
+            existingMap.get(cleanName.toLowerCase());
+
+          const studentPayload: Record<string, any> = {
+            enrolment_id: cleanEnrolmentId,
+            name: cleanName,
+            mobile: mobile || "0000000000",
+            course,
+            branch,
+            scheme,
+            year,
+            excel_index: totalCount + 1,
+            exam_fee: examFee,
+            tuition_fee: tuitionFee,
+            college_paid_amount: collegePaid,
+            tuition_paid_amount: tuitionPaid,
+            exam_paid: collegePaid >= examFee,
+            tuition_paid: tuitionPaid >= tuitionFee,
+            created_at: existingRecord?.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          if (existingRecord?.id) {
+            const studentRef = doc(db, "students", existingRecord.id);
+            batch.update(studentRef, studentPayload);
+          } else {
+            const studentRef = doc(collection(db, "students"));
+            batch.set(studentRef, studentPayload);
+          }
+
+          sheetCount++;
+          totalCount++;
+          batchOpsCount++;
+
+          if (batchOpsCount >= 450) {
+            await batch.commit();
+            batch = writeBatch(db);
+            batchOpsCount = 0;
+          }
+        }
+
+        if (sheetCount > 0) {
+          sheetSummary.push(`${sheetName}: ${sheetCount}`);
+        }
+      }
+
+      if (batchOpsCount > 0) {
+        await batch.commit();
+      }
+
+      if (totalCount === 0) {
+        toast.error("No valid student rows found across sheets. Please download and use the Sample Excel Template.");
+      } else {
+        toast.success(`Successfully imported ${totalCount} records (${sheetSummary.join(", ")})!`);
+      }
+
+      await qc.invalidateQueries({ queryKey: ["admin", "students"] });
+      await qc.refetchQueries({ queryKey: ["admin", "students"] });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Failed to process Excel file: ${err.message || "Unknown error"}`);
+    } finally {
+      setUploadingExcel(false);
+      if (e.target) e.target.value = "";
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -128,9 +540,9 @@ function Admin() {
   const studentsQ = useQuery({
     queryKey: ["admin", "students"],
     queryFn: async () => {
-      const q = query(collection(db, "students"), orderBy("created_at", "desc"));
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Student[];
+      const snap = await getDocs(collection(db, "students"));
+      const list = snap.docs.map((d: any) => ({ id: d.id, ...d.data() })) as Student[];
+      return list.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
     },
   });
 
@@ -143,7 +555,6 @@ function Admin() {
           return snap.data() as DepartmentFeeMap;
         }
       } catch (e) {
-        // Fallback
       }
       return {
         Engineering: { tuition_fee: 850, exam_fee: 50000 },
@@ -163,7 +574,6 @@ function Admin() {
           if (d.courses && d.branches) return d;
         }
       } catch (e) {
-        // Fallback
       }
       return {
         courses: [...DEFAULT_COURSES],
@@ -183,21 +593,55 @@ function Admin() {
 
     if (s) {
       list = list.filter(
-        (x) =>
+        (x: Student) =>
           x.name.toLowerCase().includes(s) ||
           x.mobile.includes(s) ||
-          x.course.toLowerCase().includes(s) ||
-          x.branch.toLowerCase().includes(s) ||
-          x.id.toLowerCase().includes(s)
+          (x.course && x.course.toLowerCase().includes(s)) ||
+          (x.branch && x.branch.toLowerCase().includes(s)) ||
+          (x.scheme && x.scheme.toLowerCase().includes(s)) ||
+          (x.year && x.year.toLowerCase().includes(s)) ||
+          x.id.toLowerCase().includes(s) ||
+          (x.enrolment_id && x.enrolment_id.toLowerCase().includes(s))
       );
     }
 
-    if (courseFilter !== "all") {
-      list = list.filter((x) => x.course === courseFilter);
+    if (schemeFilter !== "all") {
+      const sf = schemeFilter.toLowerCase();
+      list = list.filter((x: Student) => {
+        const c = (x.course || "").toLowerCase();
+        const b = (x.branch || "").toLowerCase();
+        const s = (x.scheme || "").toLowerCase();
+        const n = (x.name || "").toLowerCase();
+        const eid = (x.enrolment_id || "").toLowerCase();
+        const fullStudentText = `${c} ${b} ${s} ${n} ${eid}`;
+
+        const isPharm =
+          fullStudentText.includes("pharm") ||
+          fullStudentText.includes("d.pharm") ||
+          fullStudentText.includes("b.pharm") ||
+          fullStudentText.includes("mpharm") ||
+          fullStudentText.includes("dpharm") ||
+          fullStudentText.includes("bpharm") ||
+          fullStudentText.includes("d-pharm") ||
+          fullStudentText.includes("b-pharm");
+
+        if (sf === "pharmacy") {
+          return isPharm;
+        }
+        if (sf === "polytechnic") {
+          if (isPharm) return false;
+          return true;
+        }
+        if (sf === "engineering") {
+          if (isPharm) return false;
+          return c.includes("eng") || b.includes("eng") || c.includes("b.tech") || b.includes("b.tech") || s.includes("eng");
+        }
+        return (x.course || x.scheme || "") === schemeFilter;
+      });
     }
 
     if (statusFilter !== "all") {
-      list = list.filter((x) => {
+      list = list.filter((x: Student) => {
         const cFee = Number(x.exam_fee || 50000);
         const cPaid = Number(x.college_paid_amount || (x.exam_paid ? cFee : 0));
         const cRem = Math.max(0, cFee - cPaid);
@@ -213,7 +657,7 @@ function Admin() {
       });
     }
 
-    return list.slice().sort((a, b) => {
+    return list.slice().sort((a: Student, b: Student) => {
       if (sortBy === "name") return a.name.localeCompare(b.name);
       if (sortBy === "balance") {
         const cRemA = Math.max(0, Number(a.exam_fee || 50000) - Number(a.college_paid_amount || (a.exam_paid ? Number(a.exam_fee || 50000) : 0)));
@@ -224,13 +668,31 @@ function Admin() {
 
         return (cRemB + tRemB) - (cRemA + tRemA);
       }
-      return 0;
+      if (sortBy === "latest") {
+        return (b.created_at || "").localeCompare(a.created_at || "");
+      }
+
+      // Default: Starting to Ending Original Excel Sequence Order
+      if (a.excel_index !== undefined && b.excel_index !== undefined && a.excel_index !== b.excel_index) {
+        return a.excel_index - b.excel_index;
+      }
+
+      // Sort by creation timestamp ASCENDING (matches exact Excel row insertion sequence)
+      const timeA = a.created_at || "";
+      const timeB = b.created_at || "";
+      if (timeA && timeB && timeA !== timeB) {
+        return timeA.localeCompare(timeB);
+      }
+
+      const enrA = String(a.enrolment_id || "").trim();
+      const enrB = String(b.enrolment_id || "").trim();
+      return enrA.localeCompare(enrB, undefined, { numeric: true, sensitivity: "base" });
     });
-  }, [search, courseFilter, statusFilter, sortBy, studentsQ.data]);
+  }, [search, schemeFilter, statusFilter, sortBy, studentsQ.data]);
 
   const stats = useMemo(() => {
     const list = studentsQ.data ?? [];
-    const totalCollected = list.reduce((s, x) => {
+    const totalCollected = list.reduce((s: number, x: Student) => {
       const cFee = Number(x.exam_fee || 50000);
       const cPaid = Number(x.college_paid_amount || (x.exam_paid ? cFee : 0));
       const tFee = Number(x.tuition_fee || 850);
@@ -238,7 +700,7 @@ function Admin() {
       return s + cPaid + tPaid;
     }, 0);
 
-    const pending = list.reduce((s, x) => {
+    const pending = list.reduce((s: number, x: Student) => {
       const cFee = Number(x.exam_fee || 50000);
       const cPaid = Number(x.college_paid_amount || (x.exam_paid ? cFee : 0));
       const cRem = Math.max(0, cFee - cPaid);
@@ -248,7 +710,7 @@ function Admin() {
       return s + cRem + tRem;
     }, 0);
 
-    const fullyPaidCount = list.filter((x) => {
+    const fullyPaidCount = list.filter((x: Student) => {
       const cFee = Number(x.exam_fee || 50000);
       const cPaid = Number(x.college_paid_amount || (x.exam_paid ? cFee : 0));
       const tFee = Number(x.tuition_fee || 850);
@@ -278,8 +740,8 @@ function Admin() {
   function exportCSV() {
     const list = filtered;
     if (!list.length) return toast.info("No data to export.");
-    const headers = ["Student ID", "Name", "Mobile", "Course", "Branch", "College Fee", "College Paid", "College Balance", "Tuition Fee", "Tuition Paid", "Tuition Balance"];
-    const rows = list.map((s) => {
+    const headers = ["Enrolment ID", "Student ID", "Name", "Mobile", "Department/Course", "Branch", "Scheme", "Year", "College Fee", "College Paid", "College Balance", "Tuition Fee", "Tuition Paid", "Tuition Balance"];
+    const rows = list.map((s: Student) => {
       const cFee = Number(s.exam_fee || 50000);
       const cPaid = Number(s.college_paid_amount || (s.exam_paid ? cFee : 0));
       const cRem = Math.max(0, cFee - cPaid);
@@ -287,11 +749,14 @@ function Admin() {
       const tPaid = Number(s.tuition_paid_amount || (s.tuition_paid ? tFee : 0));
       const tRem = Math.max(0, tFee - tPaid);
       return [
+        `"${s.enrolment_id || s.id.slice(0, 8).toUpperCase()}"`,
         s.id.slice(0, 8).toUpperCase(),
         `"${s.name}"`,
         s.mobile,
-        `"${s.course}"`,
-        `"${s.branch}"`,
+        `"${s.course || "Polytechnic"}"`,
+        `"${s.branch || "Mechanical"}"`,
+        `"${s.scheme || "I-Scheme"}"`,
+        `"${s.year || "1st Year"}"`,
         cFee,
         cPaid,
         cRem,
@@ -301,7 +766,7 @@ function Admin() {
       ];
     });
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e: (string | number)[]) => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -332,15 +797,39 @@ function Admin() {
       <header className="border-b border-border/70 bg-card/60 backdrop-blur sticky top-0 z-20">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-purple shadow-glow-purple">
-              <ShieldCheck className="h-6 w-6 text-primary-foreground" />
-            </div>
+            <img src="/college_logo.png" alt="NPC Dhule Logo" className="h-11 w-auto object-contain shrink-0" />
             <div>
               <div className="text-xs font-medium text-muted-foreground">Admin Control Panel</div>
-              <div className="font-bold text-lg">Student Fee & Department Management</div>
+              <div className="font-bold text-lg leading-tight">Netaji Polytechnic College, Dhule</div>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingExcel}
+              className="text-xs font-medium border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-1.5" /> {uploadingExcel ? "Importing..." : "Upload Excel Sheet"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearAllStudents}
+              disabled={uploadingExcel}
+              className="text-xs font-medium border-rose-500/40 text-rose-600 hover:bg-rose-500/10"
+              title="Remove/delete all student records from database"
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" /> Clear Excel Data
+            </Button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".xlsx, .xls, .csv"
+              onChange={handleExcelUpload}
+              className="hidden"
+            />
             <Button
               variant="outline"
               size="sm"
@@ -399,22 +888,22 @@ function Admin() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search student name, mobile, course, branch, or ID..."
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+                placeholder="Search student name, enrolment ID, mobile, department, scheme, or year..."
                 className="pl-9 bg-card"
               />
             </div>
 
-            {/* Course Filter */}
-            <Select value={courseFilter} onValueChange={setCourseFilter}>
+            {/* Department Filter */}
+            <Select value={schemeFilter} onValueChange={setSchemeFilter}>
               <SelectTrigger className="w-[160px] bg-card text-xs">
-                <SelectValue placeholder="Course Filter" />
+                <SelectValue placeholder="All Departments" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
-                {cbConfig.courses.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                ))}
+                <SelectItem value="Polytechnic">Polytechnic</SelectItem>
+                <SelectItem value="Pharmacy">Pharmacy</SelectItem>
+                <SelectItem value="Engineering">Engineering</SelectItem>
               </SelectContent>
             </Select>
 
@@ -432,16 +921,27 @@ function Admin() {
             </Select>
 
             {/* Sort Dropdown */}
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
-              <SelectTrigger className="w-[160px] bg-card text-xs">
+            <Select value={sortBy} onValueChange={(v: string) => setSortBy(v as any)}>
+              <SelectTrigger className="w-[180px] bg-card text-xs">
                 <SelectValue placeholder="Sort By" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="sequence">Sequence / Roll No (1,2,3...)</SelectItem>
                 <SelectItem value="latest">Latest First</SelectItem>
                 <SelectItem value="name">Name A-Z</SelectItem>
                 <SelectItem value="balance">Highest Balance</SelectItem>
               </SelectContent>
             </Select>
+
+            <Button
+              onClick={handleClearAllStudents}
+              disabled={uploadingExcel}
+              variant="outline"
+              className="border-rose-500/40 text-rose-600 hover:bg-rose-500/10 font-semibold"
+              title="Remove/delete all student records from database"
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" /> Clear Excel Data
+            </Button>
 
             <Button
               onClick={() => setCreating(true)}
@@ -457,7 +957,7 @@ function Admin() {
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground border-b border-border">
                 <tr>
                   <th className="py-3.5 px-4">Student</th>
-                  <th className="py-3.5 px-4">Course / Branch</th>
+                  <th className="py-3.5 px-4">Department / Branch / Year</th>
                   <th className="py-3.5 px-4">College Fee (₹50k)</th>
                   <th className="py-3.5 px-4">Tuition Fee (₹850)</th>
                   <th className="py-3.5 px-4">Total Balance</th>
@@ -465,7 +965,7 @@ function Admin() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {filtered.map((s) => {
+                {filtered.map((s: Student) => {
                   const cFee = Number(s.exam_fee || 50000);
                   const cPaid = Number(s.college_paid_amount || (s.exam_paid ? cFee : 0));
                   const cRem = Math.max(0, cFee - cPaid);
@@ -475,20 +975,39 @@ function Admin() {
                   const tRem = Math.max(0, tFee - tPaid);
 
                   const totalRem = cRem + tRem;
+                  const rawDept = `${s.course || ""} ${s.branch || ""} ${s.scheme || ""}`.toLowerCase();
+                  const deptName = rawDept.includes("pharm") ? "Pharmacy" : rawDept.includes("poly") ? "Polytechnic" : s.course || s.scheme || "Engineering";
 
                   return (
                     <tr key={s.id} className="hover:bg-muted/20 transition">
                       <td className="py-3.5 px-4">
                         <div className="font-semibold text-foreground">{s.name}</div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                        <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
                           <span>{s.mobile}</span>
                           <span>•</span>
-                          <span className="font-mono opacity-80">{s.id.slice(0, 8).toUpperCase()}</span>
+                          <span className="font-mono bg-purple/10 text-purple px-1.5 py-0.5 rounded font-semibold text-[11px]">
+                            {s.enrolment_id || `ID: ${s.id.slice(0, 8).toUpperCase()}`}
+                          </span>
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
-                        <div className="font-medium">{s.course}</div>
-                        <div className="text-xs text-muted-foreground">{s.branch}</div>
+                        <div className="font-semibold text-foreground flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                            deptName === "Pharmacy"
+                              ? "bg-purple-100 text-purple-700 border border-purple-200"
+                              : deptName === "Polytechnic"
+                              ? "bg-blue-100 text-blue-700 border border-blue-200"
+                              : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                          }`}>
+                            {deptName}
+                          </span>
+                          <span className="text-xs text-muted-foreground">({s.scheme || "I-Scheme"})</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <span>{s.branch || "General"}</span>
+                          <span>•</span>
+                          <span className="font-medium text-slate-700">{s.year || "1st Year"}</span>
+                        </div>
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="font-medium">{inr(cFee)}</div>
@@ -521,20 +1040,20 @@ function Admin() {
                             <CreditCard className="h-3.5 w-3.5 mr-1" /> Pay
                           </Button>
                           <Button
-                            size="icon"
+                            size="sm"
                             variant="ghost"
                             onClick={() => setEditing(s)}
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            title="Edit Student Profile"
+                            className="h-8 w-8 p-0"
+                            title="Edit student details"
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button
-                            size="icon"
+                            size="sm"
                             variant="ghost"
                             onClick={() => remove(s.id)}
-                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                            title="Delete Student"
+                            className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
+                            title="Delete student record"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -545,8 +1064,8 @@ function Admin() {
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-muted-foreground">
-                      No matching student records found.
+                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                      No matching student fee records found.
                     </td>
                   </tr>
                 )}
@@ -557,16 +1076,8 @@ function Admin() {
       </main>
 
       <StudentDialog
-        open={creating}
-        departmentFees={departmentFeesQ.data}
-        courseBranchConfig={cbConfig}
-        onClose={() => setCreating(false)}
-        onSaved={() => qc.invalidateQueries({ queryKey: ["admin", "students"] })}
-      />
-      <StudentDialog
-        open={!!editing}
+        open={creating || Boolean(editing)}
         student={editing ?? undefined}
-        departmentFees={departmentFeesQ.data}
         courseBranchConfig={cbConfig}
         onClose={() => setEditing(null)}
         onSaved={() => qc.invalidateQueries({ queryKey: ["admin", "students"] })}
@@ -1005,9 +1516,10 @@ function StudentDialog({
   onSaved: () => void;
 }) {
   const [name, setName] = useState("");
+  const [enrolmentId, setEnrolmentId] = useState("");
   const [mobile, setMobile] = useState("");
-  const [course, setCourse] = useState<string>("");
-  const [branch, setBranch] = useState("");
+  const [scheme, setScheme] = useState<string>("I-Scheme");
+  const [year, setYear] = useState<string>("1st Year");
 
   const [examFee, setExamFee] = useState(String(DEFAULT_EXAM_FEE));
   const [tuitionFee, setTuitionFee] = useState("850");
@@ -1022,9 +1534,10 @@ function StudentDialog({
   useEffect(() => {
     if (student) {
       setName(student.name);
+      setEnrolmentId(student.enrolment_id || "");
       setMobile(student.mobile);
-      setCourse(student.course);
-      setBranch(student.branch);
+      setScheme(student.scheme || student.course || "I-Scheme");
+      setYear(student.year || student.branch || "1st Year");
 
       const cFee = student.exam_fee && Number(student.exam_fee) !== 2000 ? student.exam_fee : 50000;
       const tFee = student.tuition_fee && Number(student.tuition_fee) !== 50000 ? student.tuition_fee : 850;
@@ -1039,9 +1552,10 @@ function StudentDialog({
       setTuitionFirstHalf(String(student.tuition_first_half || Math.ceil(tFee / 2)));
     } else if (open) {
       setName("");
+      setEnrolmentId("");
       setMobile("");
-      setCourse("");
-      setBranch("");
+      setScheme("I-Scheme");
+      setYear("1st Year");
       setExamFee(String(DEFAULT_EXAM_FEE));
       setTuitionFee("850");
       setCollegePaidAmount("0");
@@ -1053,10 +1567,10 @@ function StudentDialog({
 
   // Auto-fill fee structure from department fees configured by admin
   useEffect(() => {
-    if (!student && course) {
-      if (departmentFees && departmentFees[course]) {
-        const cFee = departmentFees[course].exam_fee;
-        const tFee = departmentFees[course].tuition_fee;
+    if (!student && scheme) {
+      if (departmentFees && departmentFees[scheme]) {
+        const cFee = departmentFees[scheme].exam_fee;
+        const tFee = departmentFees[scheme].tuition_fee;
         setExamFee(String(cFee));
         setTuitionFee(String(tFee));
         setCollegeFirstHalf(String(Math.ceil(cFee / 2)));
@@ -1068,12 +1582,7 @@ function StudentDialog({
         setTuitionFirstHalf("425");
       }
     }
-  }, [course, student, departmentFees]);
-
-  const availableBranches = useMemo(() => {
-    if (!course) return [];
-    return courseBranchConfig.branches[course] || [];
-  }, [course, courseBranchConfig]);
+  }, [scheme, student, departmentFees]);
 
   const totalCollegeNum = Number(examFee) || 50000;
   const cFirstHalfNum = collegeFirstHalf ? Number(collegeFirstHalf) : Math.ceil(totalCollegeNum / 2);
@@ -1084,7 +1593,7 @@ function StudentDialog({
   const tSecondHalfNum = Math.max(0, totalTuitionNum - tFirstHalfNum);
 
   async function save() {
-    if (!name || !/^\d{10}$/.test(mobile) || !course || !branch)
+    if (!name || !/^\d{10}$/.test(mobile) || !scheme || !year)
       return toast.error("Fill all required fields (10-digit mobile)");
     setSaving(true);
 
@@ -1093,9 +1602,12 @@ function StudentDialog({
 
     const payload = {
       name: name.trim(),
+      enrolment_id: enrolmentId.trim() || `ENR${mobile}`,
       mobile,
-      course,
-      branch,
+      scheme,
+      year,
+      course: scheme,
+      branch: year,
       exam_fee: totalCollegeNum,
       tuition_fee: totalTuitionNum,
       college_paid_amount: cPaidNum,
@@ -1136,7 +1648,11 @@ function StudentDialog({
         </DialogHeader>
 
         <div className="grid gap-3 sm:grid-cols-2 max-h-[70vh] overflow-y-auto pr-1">
-          <div className="sm:col-span-2 space-y-2">
+          <div className="space-y-2">
+            <Label>Enrolment ID / Roll No</Label>
+            <Input value={enrolmentId} onChange={(e) => setEnrolmentId(e.target.value)} placeholder="e.g. ENR2024001" />
+          </div>
+          <div className="space-y-2">
             <Label>Student Full Name</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full Name" />
           </div>
@@ -1149,23 +1665,23 @@ function StudentDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>Department / Course</Label>
-            <Select value={course} onValueChange={(v) => { setCourse(v); setBranch(""); }}>
-              <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+            <Label>Academic Scheme</Label>
+            <Select value={scheme} onValueChange={setScheme}>
+              <SelectTrigger><SelectValue placeholder="Select scheme" /></SelectTrigger>
               <SelectContent>
-                {courseBranchConfig.courses.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                {SCHEMES.map((sc) => (
+                  <SelectItem key={sc} value={sc}>{sc}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label>Branch</Label>
-            <Select value={branch} onValueChange={setBranch} disabled={!course}>
-              <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+            <Label>Studying Year</Label>
+            <Select value={year} onValueChange={setYear}>
+              <SelectTrigger><SelectValue placeholder="Select year" /></SelectTrigger>
               <SelectContent>
-                {availableBranches.map((b) => (
-                  <SelectItem key={b} value={b}>{b}</SelectItem>
+                {YEARS.map((yr) => (
+                  <SelectItem key={yr} value={yr}>{yr}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

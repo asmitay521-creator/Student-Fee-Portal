@@ -1,3 +1,9 @@
+export const SCHEMES = ["I-Scheme", "K-Scheme", "G-Scheme", "A-Scheme", "Autonomous Scheme"] as const;
+export type Scheme = (typeof SCHEMES)[number];
+
+export const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year"] as const;
+export type Year = (typeof YEARS)[number];
+
 export const COURSES = ["Engineering", "Polytechnic", "Pharmacy"] as const;
 export type Course = (typeof COURSES)[number];
 

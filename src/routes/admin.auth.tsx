@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ShieldCheck, ArrowLeft, KeyRound, Sparkles } from "lucide-react";
+import { ShieldCheck, ArrowLeft } from "lucide-react";
 import { auth, db } from "@/lib/firebase";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
@@ -81,12 +81,6 @@ function AdminAuth() {
     }
   }
 
-  function fillDemoAdmin() {
-    setEmail("admin@college.edu");
-    setPassword("admin123456");
-    toast.info("Demo credentials filled. Click Sign In or Create Admin Account.");
-  }
-
   return (
     <div className="min-h-screen bg-gradient-hero grid place-items-center p-6 relative overflow-hidden">
       <div className="pointer-events-none absolute inset-0 opacity-30">
@@ -115,26 +109,6 @@ function AdminAuth() {
                 </p>
               </div>
             </div>
-          </div>
-
-          {/* Demo Credentials Quick Button */}
-          <div className="mt-5 rounded-2xl bg-muted/60 border border-border p-3.5 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-purple shrink-0" />
-              <div>
-                <div className="font-semibold text-foreground">Need quick admin access?</div>
-                <div className="text-muted-foreground">Click to fill demo admin login</div>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={fillDemoAdmin}
-              className="text-xs font-semibold h-7 border-purple/40 text-purple hover:bg-purple/10"
-            >
-              Fill Demo Admin
-            </Button>
           </div>
 
           <Tabs defaultValue="signin" className="mt-6">
